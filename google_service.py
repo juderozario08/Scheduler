@@ -19,7 +19,30 @@ except ImportError:
     build = None
 
 
-def create_service(client_secret_file: str, api_name: str, api_version: str, *scopes, prefix: str = ''):
+from typing import Any, Optional
+
+
+def _save_token(file_path: str, content: str) -> None:
+    """Saves token content with secure file permissions (0600 - owner read/write only)."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    mode = 0o600
+    fd = os.open(file_path, flags, mode)
+    try:
+        with open(fd, 'w') as token_file:
+            token_file.write(content)
+    except Exception:
+        os.close(fd)
+        raise
+
+
+def create_service(
+    client_secret_file: str,
+    api_name: str,
+    api_version: str,
+    *scopes: Any,
+    prefix: str = '',
+    token_dir: Optional[str] = None,
+) -> Any:
     """Creates and authenticates a Google API service instance."""
     if InstalledAppFlow is None or build is None:
         raise ImportError(
@@ -37,20 +60,25 @@ def create_service(client_secret_file: str, api_name: str, api_version: str, *sc
         effective_scopes = []
 
     creds = None
-    working_dir = os.getcwd()
-    token_dir = os.path.join(working_dir, 'token files')
-    if not os.path.exists(token_dir):
-        if os.path.exists(os.path.join(working_dir, 'token_files')):
-            token_dir = os.path.join(working_dir, 'token_files')
-        elif os.path.exists(os.path.join(working_dir, 'tokenfiles')):
-            token_dir = os.path.join(working_dir, 'tokenfiles')
+    if token_dir is None:
+        token_dir = os.environ.get('GOOGLE_TOKEN_DIR')
 
-    os.makedirs(token_dir, exist_ok=True)
+    if token_dir is None:
+        working_dir = os.getcwd()
+        for candidate_name in ('token files', 'token_files', 'tokenfiles'):
+            candidate_path = os.path.join(working_dir, candidate_name)
+            if os.path.exists(candidate_path):
+                token_dir = candidate_path
+                break
+        if token_dir is None:
+            token_dir = os.path.join(working_dir, 'token files')
+
+    os.makedirs(token_dir, mode=0o700, exist_ok=True)
 
     json_path = os.path.join(token_dir, f'token_{api_service_name}_{api_version}{prefix}.json')
     pickle_path = os.path.join(token_dir, f'token_{api_service_name}_{api_version}{prefix}.pickle')
 
-    # Load existing credentials (JSON preferred, fallback to pickle)
+    # Load existing credentials (JSON preferred; migrate legacy pickle if present)
     if os.path.exists(json_path) and Credentials is not None:
         try:
             creds = Credentials.from_authorized_user_file(json_path, effective_scopes)
@@ -62,37 +90,54 @@ def create_service(client_secret_file: str, api_name: str, api_version: str, *sc
         try:
             with open(pickle_path, 'rb') as token_file:
                 creds = pickle.load(token_file)
+            # Safely migrate legacy pickle credentials to secure JSON format
+            if creds and hasattr(creds, 'to_json'):
+                _save_token(json_path, creds.to_json())
+                try:
+                    os.remove(pickle_path)
+                except OSError:
+                    pass
         except Exception as e:
-            print(f"Warning: Failed loading pickle token from {pickle_path}: {e}")
+            print(f"Warning: Failed loading legacy pickle token from {pickle_path}: {e}")
             creds = None
 
     # Refresh or run auth flow if invalid/missing
     if not creds or not creds.valid:
+        refreshed = False
         if creds and creds.expired and creds.refresh_token and Request is not None:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+                refreshed = True
+            except Exception as e:
+                print(f"Warning: Token refresh failed ({e}), requesting re-authentication.")
+                creds = None
+
+        if not refreshed or not creds:
+            if not os.path.exists(client_secret_file):
+                raise FileNotFoundError(
+                    f"Client secrets file not found: '{client_secret_file}'. "
+                    "Please provide a valid Google OAuth credentials.json file or set GOOGLE_CLIENT_SECRET_FILE."
+                )
             flow = InstalledAppFlow.from_client_secrets_file(client_secret_file, effective_scopes)
             creds = flow.run_local_server(port=0)
 
-        # Save credentials
+        # Save credentials with restrictive permissions
         if hasattr(creds, 'to_json'):
-            with open(json_path, 'w') as token_file:
-                token_file.write(creds.to_json())
+            _save_token(json_path, creds.to_json())
         else:
             with open(pickle_path, 'wb') as token_file:
                 pickle.dump(creds, token_file)
+            try:
+                os.chmod(pickle_path, 0o600)
+            except OSError:
+                pass
 
     try:
         service = build(api_service_name, api_version, credentials=creds, static_discovery=False)
         print(api_service_name, api_version, 'service created successfully')
         return service
     except Exception as e:
-        print(e)
-        print(f'Failed to create service instance for {api_service_name}')
-        if os.path.exists(json_path):
-            os.remove(json_path)
-        if os.path.exists(pickle_path):
-            os.remove(pickle_path)
+        print(f"Error initializing {api_service_name} service: {e}")
         return None
 
 
@@ -100,9 +145,16 @@ def create_service(client_secret_file: str, api_name: str, api_version: str, *sc
 Create_Service = create_service
 
 
-def convert_to_RFC_datetime(year: int = 1900, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0) -> str:
+def convert_to_RFC_datetime(
+    year: int = 1900,
+    month: int = 1,
+    day: int = 1,
+    hour: int = 0,
+    minute: int = 0,
+    second: int = 0,
+) -> str:
     """Formats datetime components into an RFC 3339 UTC timestamp string."""
-    return datetime.datetime(year, month, day, hour, minute, 0).isoformat() + 'Z'
+    return datetime.datetime(year, month, day, hour, minute, second).isoformat() + 'Z'
 
 
 class GoogleSheetsHelper:
