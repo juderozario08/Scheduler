@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OAuth tokens & credentials
+token files/
+token_files/
+tokenfiles/
+credentials.json
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
