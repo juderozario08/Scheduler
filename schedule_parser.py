@@ -10,7 +10,8 @@ from PIL import Image
 
 sys.dont_write_bytecode = True
 
-PATH = os.environ.get('SCHEDULER_IMAGES_DIR', '/Users/juderozario/Downloads/images/')
+PATH = os.environ.get('SCHEDULER_IMAGES_DIR',
+                      '/Users/juderozario/Downloads/images/')
 EXTRACTED_IMAGE = ''
 EXTRACTED_TEXT: list[str] = []
 DAYS = [
@@ -212,7 +213,8 @@ def get_text_from_picture(image_dir: str = PATH) -> list[str]:
             image_path = os.path.join(target_dir, image_name)
             with Image.open(image_path) as img:
                 ocr_text = pytesseract.image_to_string(img)
-                cleaned = ocr_text.replace('\r', '').replace(' ', '').replace('.', '')
+                cleaned = ocr_text.replace('\r', '').replace(
+                    ' ', '').replace('.', '')
                 if cleaned:
                     extracted_content += cleaned + '\n'
 
@@ -259,15 +261,19 @@ def get_shifts_from_text(
                 if role is not None and i + 1 < num_lines:
                     # Date digits could appear before or after day name
                     date_part = line.replace('.', '')[:line.find(day)]
-                    date_digits = ''.join(ch for ch in date_part if ch.isdigit())
+                    date_digits = ''.join(
+                        ch for ch in date_part if ch.isdigit())
                     if not date_digits:
-                        after_day = line.replace('.', '')[line.find(day) + len(day):]
-                        date_digits = ''.join(ch for ch in after_day if ch.isdigit())
+                        after_day = line.replace(
+                            '.', '')[line.find(day) + len(day):]
+                        date_digits = ''.join(
+                            ch for ch in after_day if ch.isdigit())
 
                     if date_digits:
                         next_line = text_lines[i + 1]
                         bracket_idx = next_line.find('[')
-                        shift_time = next_line[:bracket_idx] if bracket_idx != -1 else next_line
+                        shift_time = next_line[:bracket_idx] if bracket_idx != - \
+                            1 else next_line
                         data.append([date_digits, shift_time, role])
                 break
 
@@ -280,7 +286,8 @@ def main() -> None:
     for s in parsed_shifts:
         print(
             f"  {s.year}-{s.month:02d}-{s.date:02d}: "
-            f"{s.start_hour:02d}:{s.start_minute:02d} - {s.end_hour:02d}:{s.end_minute:02d} ({s.role})"
+            f"{s.start_hour:02d}:{
+                s.start_minute:02d} - {s.end_hour:02d}:{s.end_minute:02d} ({s.role})"
         )
 
 

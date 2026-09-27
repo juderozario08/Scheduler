@@ -61,13 +61,16 @@ def create_service(
 
     os.makedirs(token_dir, mode=0o700, exist_ok=True)
 
-    json_path = os.path.join(token_dir, f'token_{api_service_name}_{api_version}{prefix}.json')
-    pickle_path = os.path.join(token_dir, f'token_{api_service_name}_{api_version}{prefix}.pickle')
+    json_path = os.path.join(token_dir, f'token_{api_service_name}_{
+                             api_version}{prefix}.json')
+    pickle_path = os.path.join(token_dir, f'token_{api_service_name}_{
+                               api_version}{prefix}.pickle')
 
     # Load existing credentials (JSON preferred; migrate legacy pickle if present)
     if os.path.exists(json_path):
         try:
-            creds = Credentials.from_authorized_user_file(json_path, effective_scopes)
+            creds = Credentials.from_authorized_user_file(
+                json_path, effective_scopes)
         except Exception as e:
             print(f"Warning: Failed loading JSON token from {json_path}: {e}")
             creds = None
@@ -84,7 +87,8 @@ def create_service(
                 except OSError:
                     pass
         except Exception as e:
-            print(f"Warning: Failed loading legacy pickle token from {pickle_path}: {e}")
+            print(f"Warning: Failed loading legacy pickle token from {
+                  pickle_path}: {e}")
             creds = None
 
     # Refresh or run auth flow if invalid/missing
@@ -95,7 +99,8 @@ def create_service(
                 creds.refresh(Request())
                 refreshed = True
             except Exception as e:
-                print(f"Warning: Token refresh failed ({e}), requesting re-authentication.")
+                print(f"Warning: Token refresh failed ({
+                      e}), requesting re-authentication.")
                 creds = None
 
         if not refreshed or not creds:
@@ -104,7 +109,8 @@ def create_service(
                     f"Client secrets file not found: '{client_secret_file}'. "
                     "Please provide a valid Google OAuth credentials.json file or set GOOGLE_CLIENT_SECRET_FILE."
                 )
-            flow = InstalledAppFlow.from_client_secrets_file(client_secret_file, effective_scopes)
+            flow = InstalledAppFlow.from_client_secrets_file(
+                client_secret_file, effective_scopes)
             creds = flow.run_local_server(port=0)
 
         # Save credentials with restrictive permissions
@@ -119,7 +125,8 @@ def create_service(
                 pass
 
     try:
-        service = build(api_service_name, api_version, credentials=creds, static_discovery=False)
+        service = build(api_service_name, api_version,
+                        credentials=creds, static_discovery=False)
         print(api_service_name, api_version, 'service created successfully')
         return service
     except Exception as e:
@@ -165,7 +172,8 @@ class GoogleSheetsHelper:
         'PASTE_CONDITIONAL_FORMATTING',
     )
 
-    Paste_Orientation = namedtuple('_Paste_Orientation', ('normal', 'transpose'))('NORMAL', 'TRANSPOSE')
+    Paste_Orientation = namedtuple(
+        '_Paste_Orientation', ('normal', 'transpose'))('NORMAL', 'TRANSPOSE')
 
     Merge_Type = namedtuple(
         '_Merge_Type',
@@ -177,9 +185,11 @@ class GoogleSheetsHelper:
         ('comma', 'semicolon', 'period', 'space', 'custom', 'auto_detect'),
     )('COMMA', 'SEMICOLON', 'PERIOD', 'SPACE', 'CUSTOM', 'AUTODETECT')
 
-    Dimension = namedtuple('_Dimension', ('rows', 'columns'))('ROWS', 'COLUMNS')
+    Dimension = namedtuple(
+        '_Dimension', ('rows', 'columns'))('ROWS', 'COLUMNS')
 
-    Value_Input_Option = namedtuple('_Value_Input_Option', ('raw', 'user_entered'))('RAW', 'USER_ENTERED')
+    Value_Input_Option = namedtuple(
+        '_Value_Input_Option', ('raw', 'user_entered'))('RAW', 'USER_ENTERED')
 
     Value_Render_Option = namedtuple(
         '_Value_Render_Option',
@@ -195,7 +205,8 @@ class GoogleSheetsHelper:
         end_column_number: int = 0,
     ) -> dict:
         """Returns a GridRange specification dictionary."""
-        start_col = (start_column_number - 1) if start_column_number is not None else 0
+        start_col = (start_column_number -
+                     1) if start_column_number is not None else 0
         return {
             'sheetId': sheet_id,
             'startRowIndex': start_row_number - 1,
