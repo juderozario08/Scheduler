@@ -1,13 +1,14 @@
 import argparse
+import calendar
 import datetime
 import os
 import sys
-from typing import Any, Optional
+from typing import Any
+
+from google_service import Create_Service
+from schedule_parser import Shift, get_shifts_from_text
 
 sys.dont_write_bytecode = True
-
-from google_service import Create_Service, convert_to_RFC_datetime
-from schedule_parser import Shift, get_shifts_from_text
 
 CLIENT_SECRET_FILE = os.environ.get('GOOGLE_CLIENT_SECRET_FILE', 'credentials.json')
 API_NAME = 'calendar'
@@ -27,8 +28,6 @@ def build_event_body(
     color_id: Any = 11,
 ) -> dict[str, Any]:
     """Constructs the Google Calendar event payload from a Shift object."""
-    import calendar
-
     try:
         start_date = datetime.date(shift.get_year(), shift.get_month(), shift.get_date())
     except ValueError:
@@ -70,14 +69,14 @@ def build_event_body(
 
 
 def sync_shifts_to_calendar(
-    calendar_service: Optional[Any] = None,
+    calendar_service: Any | None = None,
     calendar_id: str = WORK_CALENDAR_ID,
-    shifts: Optional[list[Shift]] = None,
+    shifts: list[Shift] | None = None,
     location: str = LOCATION,
     timezone_offset: str = TIMEZONE_OFFSET,
     dry_run: bool = False,
-    month: Optional[int] = None,
-    year: Optional[int] = None,
+    month: int | None = None,
+    year: int | None = None,
 ) -> list[dict[str, Any]]:
     """Fetches shifts from text/OCR and inserts them into the target Google Calendar."""
     global service
@@ -125,7 +124,7 @@ def sync_shifts_to_calendar(
     return created_events
 
 
-if __name__ == '__main__':
+def main() -> None:
     parser = argparse.ArgumentParser(description="Sync work shifts to Google Calendar")
     parser.add_argument('--calendar-id', default=WORK_CALENDAR_ID, help="Google Calendar ID")
     parser.add_argument('--location', default=LOCATION, help="Location of work shifts")
@@ -143,3 +142,7 @@ if __name__ == '__main__':
         month=args.month,
         year=args.year,
     )
+
+
+if __name__ == '__main__':
+    main()

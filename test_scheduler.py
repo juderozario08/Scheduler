@@ -1,14 +1,18 @@
+import os
+import stat
 import sys
-
-sys.dont_write_bytecode = True
-
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 from calendar_sync import build_event_body, sync_shifts_to_calendar
-from google_service import GoogleSheetsHelper, convert_to_RFC_datetime
+from google_service import (
+    GoogleSheetsHelper,
+    _save_token,
+    convert_to_RFC_datetime,
+    create_service,
+)
 from schedule_parser import (
-    DAYS,
     MONTH_NAMES,
     Shift,
     check_change_for_month,
@@ -16,6 +20,8 @@ from schedule_parser import (
     format_data,
     get_shifts_from_text,
 )
+
+sys.dont_write_bytecode = True
 
 
 class TestShiftClass(unittest.TestCase):
@@ -317,11 +323,6 @@ class TestCalendarSync(unittest.TestCase):
 
 class TestGoogleService(unittest.TestCase):
     def test_save_token_permissions(self):
-        import os
-        import stat
-        import tempfile
-        from google_service import _save_token
-
         with tempfile.TemporaryDirectory() as tmpdir:
             token_path = os.path.join(tmpdir, 'test_token.json')
             _save_token(token_path, '{"token": "secret"}')
@@ -334,13 +335,13 @@ class TestGoogleService(unittest.TestCase):
             self.assertEqual(mode, 0o600)
 
     def test_create_service_missing_client_secrets(self):
-        import tempfile
-        from google_service import create_service
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch('google_service.InstalledAppFlow', MagicMock()), patch('google_service.build', MagicMock()):
-                with self.assertRaises(FileNotFoundError):
-                    create_service('nonexistent_client_secrets.json', 'calendar', 'v3', token_dir=tmpdir)
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            patch('google_service.InstalledAppFlow', MagicMock()),
+            patch('google_service.build', MagicMock()),
+            self.assertRaises(FileNotFoundError),
+        ):
+            create_service('nonexistent_client_secrets.json', 'calendar', 'v3', token_dir=tmpdir)
 
 
 if __name__ == '__main__':

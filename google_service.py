@@ -1,25 +1,16 @@
-import sys
-
-sys.dont_write_bytecode = True
-
-from collections import namedtuple
 import datetime
 import os
 import pickle
+import sys
+from collections import namedtuple
+from typing import Any
 
-try:
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build
-except ImportError:
-    Request = None
-    Credentials = None
-    InstalledAppFlow = None
-    build = None
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 
-
-from typing import Any, Optional
+sys.dont_write_bytecode = True
 
 
 def _save_token(file_path: str, content: str) -> None:
@@ -41,14 +32,9 @@ def create_service(
     api_version: str,
     *scopes: Any,
     prefix: str = '',
-    token_dir: Optional[str] = None,
+    token_dir: str | None = None,
 ) -> Any:
     """Creates and authenticates a Google API service instance."""
-    if InstalledAppFlow is None or build is None:
-        raise ImportError(
-            "google-api-python-client, google-auth, and google-auth-oauthlib are required to create a Google API service."
-        )
-
     api_service_name = api_name
 
     if scopes:
@@ -79,7 +65,7 @@ def create_service(
     pickle_path = os.path.join(token_dir, f'token_{api_service_name}_{api_version}{prefix}.pickle')
 
     # Load existing credentials (JSON preferred; migrate legacy pickle if present)
-    if os.path.exists(json_path) and Credentials is not None:
+    if os.path.exists(json_path):
         try:
             creds = Credentials.from_authorized_user_file(json_path, effective_scopes)
         except Exception as e:
@@ -104,7 +90,7 @@ def create_service(
     # Refresh or run auth flow if invalid/missing
     if not creds or not creds.valid:
         refreshed = False
-        if creds and creds.expired and creds.refresh_token and Request is not None:
+        if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
                 refreshed = True

@@ -1,24 +1,18 @@
+import calendar
+import os
+import re
 import sys
+from dataclasses import dataclass
+from datetime import date as dt
+
+import pytesseract
+from PIL import Image
 
 sys.dont_write_bytecode = True
 
-import calendar
-from dataclasses import dataclass
-from datetime import date as dt
-import os
-import re
-from typing import Optional
-
-try:
-    from PIL import Image
-    import pytesseract
-except ImportError:
-    Image = None
-    pytesseract = None
-
 PATH = os.environ.get('SCHEDULER_IMAGES_DIR', '/Users/juderozario/Downloads/images/')
 EXTRACTED_IMAGE = ''
-EXTRACTED_TEXT = []
+EXTRACTED_TEXT: list[str] = []
 DAYS = [
     'Sunday',
     'Monday',
@@ -88,88 +82,6 @@ class Shift:
         return self.role
 
 
-def get_text_from_picture(image_dir: str = PATH) -> list[str]:
-    """Reads schedule images from image_dir, runs OCR, and populates extracted text lines."""
-    global EXTRACTED_IMAGE, EXTRACTED_TEXT
-
-    if Image is None or pytesseract is None:
-        raise ImportError("Pillow and pytesseract are required for image OCR.")
-
-    extracted_content = ""
-    # Search image_dir if it exists; otherwise fall back to current directory
-    target_dir = image_dir if os.path.isdir(image_dir) else '.'
-
-    valid_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff')
-    for image_name in sorted(os.listdir(target_dir)):
-        if image_name.lower().endswith(valid_extensions):
-            image_path = os.path.join(target_dir, image_name)
-            with Image.open(image_path) as img:
-                ocr_text = pytesseract.image_to_string(img)
-                cleaned = ocr_text.replace('\r', '').replace(' ', '').replace('.', '')
-                if cleaned:
-                    extracted_content += cleaned + '\n'
-
-    EXTRACTED_IMAGE = extracted_content
-    EXTRACTED_TEXT = [line for line in EXTRACTED_IMAGE.splitlines() if line]
-    return EXTRACTED_TEXT
-
-
-def get_shifts_from_text(
-    text_lines: Optional[list[str]] = None,
-    month: Optional[int] = None,
-    year: Optional[int] = None,
-) -> list[Shift]:
-    """Parses extracted schedule lines to construct Shift objects."""
-    global EXTRACTED_TEXT
-
-    if text_lines is None:
-        get_text_from_picture()
-        text_lines = EXTRACTED_TEXT
-
-    # Check for month mentions in text lines if month not explicitly passed
-    detected_month = month
-    if detected_month is None and text_lines:
-        for line in text_lines:
-            m = check_change_for_month(line)
-            if m != -1:
-                detected_month = m
-                break
-
-    data = []
-    num_lines = len(text_lines)
-
-    for i in range(num_lines):
-        line = text_lines[i]
-        for day in DAYS:
-            if day in line:
-                # Search up to next 3 lines for the role identifier '/'
-                role = None
-                for offset in range(2, min(5, num_lines - i)):
-                    candidate = text_lines[i + offset]
-                    if any(d in candidate for d in DAYS):
-                        break
-                    if '/' in candidate:
-                        role = candidate[candidate.find('/') + 1:].strip()
-                        break
-
-                if role is not None and i + 1 < num_lines:
-                    # Date digits could appear before or after day name
-                    date_part = line.replace('.', '')[:line.find(day)]
-                    date_digits = ''.join(ch for ch in date_part if ch.isdigit())
-                    if not date_digits:
-                        after_day = line.replace('.', '')[line.find(day) + len(day):]
-                        date_digits = ''.join(ch for ch in after_day if ch.isdigit())
-
-                    if date_digits:
-                        next_line = text_lines[i + 1]
-                        bracket_idx = next_line.find('[')
-                        shift_time = next_line[:bracket_idx] if bracket_idx != -1 else next_line
-                        data.append([date_digits, shift_time, role])
-                break
-
-    return format_data(data, base_month=detected_month, base_year=year)
-
-
 def extract_time(time_str: str) -> list[int]:
     """Extracts [start_hour, start_minute, end_hour, end_minute] from a time range string."""
     cleaned = re.sub(r'\[.*?\]', '', time_str).strip()
@@ -235,9 +147,9 @@ def check_change_for_month(data: str) -> int:
 
 def format_data(
     data: list[list[str]],
-    base_date: Optional[int] = None,
-    base_month: Optional[int] = None,
-    base_year: Optional[int] = None,
+    base_date: int | None = None,
+    base_month: int | None = None,
+    base_year: int | None = None,
 ) -> list[Shift]:
     """Converts raw parsed rows into structured Shift objects with month/year resolution."""
     cur_date = base_date if base_date is not None else CURRENT_DATE
@@ -286,8 +198,91 @@ def format_data(
     return shifts
 
 
-if __name__ == '__main__':
+def get_text_from_picture(image_dir: str = PATH) -> list[str]:
+    """Reads schedule images from image_dir, runs OCR, and populates extracted text lines."""
+    global EXTRACTED_IMAGE, EXTRACTED_TEXT
+
+    extracted_content = ""
+    # Search image_dir if it exists; otherwise fall back to current directory
+    target_dir = image_dir if os.path.isdir(image_dir) else '.'
+
+    valid_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff')
+    for image_name in sorted(os.listdir(target_dir)):
+        if image_name.lower().endswith(valid_extensions):
+            image_path = os.path.join(target_dir, image_name)
+            with Image.open(image_path) as img:
+                ocr_text = pytesseract.image_to_string(img)
+                cleaned = ocr_text.replace('\r', '').replace(' ', '').replace('.', '')
+                if cleaned:
+                    extracted_content += cleaned + '\n'
+
+    EXTRACTED_IMAGE = extracted_content
+    EXTRACTED_TEXT = [line for line in EXTRACTED_IMAGE.splitlines() if line]
+    return EXTRACTED_TEXT
+
+
+def get_shifts_from_text(
+    text_lines: list[str] | None = None,
+    month: int | None = None,
+    year: int | None = None,
+) -> list[Shift]:
+    """Parses extracted schedule lines to construct Shift objects."""
+    if text_lines is None:
+        text_lines = get_text_from_picture()
+
+    # Check for month mentions in text lines if month not explicitly passed
+    detected_month = month
+    if detected_month is None and text_lines:
+        for line in text_lines:
+            m = check_change_for_month(line)
+            if m != -1:
+                detected_month = m
+                break
+
+    data = []
+    num_lines = len(text_lines)
+
+    for i in range(num_lines):
+        line = text_lines[i]
+        for day in DAYS:
+            if day in line:
+                # Search up to next 3 lines for the role identifier '/'
+                role = None
+                for offset in range(2, min(5, num_lines - i)):
+                    candidate = text_lines[i + offset]
+                    if any(d in candidate for d in DAYS):
+                        break
+                    if '/' in candidate:
+                        role = candidate[candidate.find('/') + 1:].strip()
+                        break
+
+                if role is not None and i + 1 < num_lines:
+                    # Date digits could appear before or after day name
+                    date_part = line.replace('.', '')[:line.find(day)]
+                    date_digits = ''.join(ch for ch in date_part if ch.isdigit())
+                    if not date_digits:
+                        after_day = line.replace('.', '')[line.find(day) + len(day):]
+                        date_digits = ''.join(ch for ch in after_day if ch.isdigit())
+
+                    if date_digits:
+                        next_line = text_lines[i + 1]
+                        bracket_idx = next_line.find('[')
+                        shift_time = next_line[:bracket_idx] if bracket_idx != -1 else next_line
+                        data.append([date_digits, shift_time, role])
+                break
+
+    return format_data(data, base_month=detected_month, base_year=year)
+
+
+def main() -> None:
     parsed_shifts = get_shifts_from_text()
     print(f"Extracted {len(parsed_shifts)} shift(s):")
     for s in parsed_shifts:
-        print(f"  {s.year}-{s.month:02d}-{s.date:02d}: {s.start_hour:02d}:{s.start_minute:02d} - {s.end_hour:02d}:{s.end_minute:02d} ({s.role})")
+        print(
+            f"  {s.year}-{s.month:02d}-{s.date:02d}: "
+            f"{s.start_hour:02d}:{s.start_minute:02d} - {s.end_hour:02d}:{s.end_minute:02d} ({s.role})"
+        )
+
+
+if __name__ == '__main__':
+    main()
